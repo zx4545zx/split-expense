@@ -1,0 +1,53 @@
+{
+  "id": "split-expense-pwa",
+  "name": "Split Expense - หารค่าใช้จ่าย",
+  "short_name": "Split Expense",
+  "description": "แอพหารค่าใช้จ่ายสำหรับท่องเที่ยว กินข้าว หรือกิจกรรมต่างๆ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "th",
+  "dir": "ltr",
+  "categories": ["finance", "utilities", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home.svg",
+      "sizes": "375x667",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "หน้าแรก - รายการกลุ่ม"
+    },
+    {
+      "src": "/screenshots/group.svg",
+      "sizes": "375x667",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "รายละเอียดกลุ่ม"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "สร้างกลุ่มใหม่",
+      "short_name": "สร้างกลุ่ม",
+      "description": "สร้างกลุ่มหารค่าใช้จ่ายใหม่",
+      "url": "/?action=create-group",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    }
+  ]
+}
