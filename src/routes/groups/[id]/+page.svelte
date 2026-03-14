@@ -1,14 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import { Button, Card, Input, Modal, Header, Avatar, Skeleton, GroupSkeleton, PullToRefresh } from '$lib/components';
   import { getSupabaseClient } from '$lib/supabase';
   import { toastStore, isLoading, currentGroup, groupMembers } from '$lib/stores';
   import { formatDate } from '$lib/utils';
   import type { Group, GroupMember, Bill, BillSplit } from '$lib/types';
-  import { 
-    Users, Plus, ArrowRight, Trash2, Receipt, Calculator, 
-    ChevronRight, UserPlus, X, RefreshCw
+  import {
+    Users, Plus, ArrowRight, Trash2, Receipt, Calculator,
+    ChevronRight, UserPlus, X, RefreshCw, Grid
   } from 'lucide-svelte';
 
   const groupId = page.params.id as string;
@@ -386,7 +387,8 @@
           {:else}
             <div class="space-y-3">
               {#each bills as bill, i (bill.id)}
-                <Card class="group animate-slide-in" style="animation-delay: {i * 50}ms">
+                <a href="/groups/{groupId}/bills/{bill.id}" class="block">
+                <Card class="group animate-slide-in cursor-pointer hover:bg-gray-50 p-4" style="animation-delay: {i * 50}ms">
                   <div class="flex items-start justify-between">
                     <div class="flex-1">
                       <div class="flex items-center gap-2 mb-1">
@@ -431,6 +433,7 @@
                     </button>
                   </div>
                 </Card>
+                </a>
               {/each}
             </div>
           {/if}
@@ -504,7 +507,13 @@
       <!-- Summary Tab -->
       {#if activeTab === 'summary'}
         <div class="space-y-4 animate-fade-in" style="animation-delay: 150ms">
-          <h3 class="text-lg font-semibold text-gray-900">สรุปยอดการเงิน</h3>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900">สรุปยอดการเงิน</h3>
+            <Button variant="primary" onclick={() => goto(`/groups/${groupId}/summary`)} class="gap-1 text-sm">
+              <Grid class="w-4 h-4" />
+              ดูตาราง
+            </Button>
+          </div>
           
           {#if isInitialLoading}
             <!-- Loading Skeleton -->

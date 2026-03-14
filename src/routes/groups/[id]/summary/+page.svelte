@@ -6,7 +6,8 @@
   import { toastStore, isLoading } from '$lib/stores';
   import { formatCurrency, formatDate, copyToClipboard } from '$lib/utils';
   import type { Group, GroupMember, Bill, BillSplit } from '$lib/types';
-  import { Calculator, ArrowRightLeft, Copy, Check, Users, Receipt } from 'lucide-svelte';
+  import { Calculator, ArrowRightLeft, Copy, Check, Users, Receipt, Grid, List, Image } from 'lucide-svelte';
+  import html2canvas from 'html2canvas';
 
   const groupId = page.params.id as string;
   const supabase = getSupabaseClient();
@@ -15,6 +16,9 @@
   let members = $state<GroupMember[]>([]);
   let bills = $state<(Bill & { bill_splits: (BillSplit & { member: GroupMember })[], payer: GroupMember | null })[]>([]);
   let copied = $state(false);
+  let viewMode = $state<'card' | 'table'>('card');
+  let tableRef = $state<HTMLElement | null>(null);
+  let savingImage = $state(false);
 
   async function loadData() {
     isLoading.set(true);
@@ -51,8 +55,8 @@
 
           const splitsWithMembers = (splitsData || []).map((split) => ({
             ...split,
-            member: members.find((m) => m.id === split.member_id) || { 
-              id: split.member_id, name: 'Unknown', group_id: '', user_id: null, created_at: '' 
+            member: members.find((m) => m.id === split.member_id) || {
+              id: split.member_id, name: 'Unknown', group_id: '', user_id: null, created_at: ''
             },
           }));
 
@@ -77,9 +81,9 @@
   }
 
   function calculateSummary() {
-    const summary: Record<string, { 
-      member: GroupMember; 
-      paid: number; 
+    const summary: Record<string, {
+      member: GroupMember;
+      paid: number;
       owes: number;
       net: number;
     }> = {};
@@ -110,14 +114,14 @@
   function calculateSettlements() {
     const summary = calculateSummary();
     const settlements: { from: string; to: string; amount: number }[] = [];
-    
+
     const debtors = summary.filter(s => s.net < -0.01).map(s => ({ ...s, remaining: Math.abs(s.net) }));
     const creditors = summary.filter(s => s.net > 0.01).map(s => ({ ...s, remaining: s.net }));
 
     for (const debtor of debtors) {
       for (const creditor of creditors) {
         if (debtor.remaining < 0.01 || creditor.remaining < 0.01) continue;
-        
+
         const amount = Math.min(debtor.remaining, creditor.remaining);
         if (amount > 0.01) {
           settlements.push({
@@ -137,30 +141,51 @@
   async function copySummary() {
     const summary = calculateSummary();
     const settlements = calculateSettlements();
-    
+
     let text = `📊 สรุปยอด ${group?.name}\n`;
     text += `${'='.repeat(30)}\n\n`;
-    
+
     text += `💰 ยอดรวมทั้งหมด: ${formatCurrency(totalAmount)}\n\n`;
-    
+
     text += `👥 ยอดต่อคน:\n`;
     summary.forEach(s => {
       const status = s.net >= 0 ? '✅ ต้องได้รับ' : '💸 ต้องจ่าย';
       text += `  ${s.member.name}: ${formatCurrency(Math.abs(s.net))} ${status}\n`;
     });
-    
+
     if (settlements.length > 0) {
       text += `\n🔄 การเคลียร์ยอด:\n`;
       settlements.forEach(s => {
         text += `  ${s.from} → ${s.to}: ${formatCurrency(s.amount)}\n`;
       });
     }
-    
+
     const success = await copyToClipboard(text);
     if (success) {
       copied = true;
       setTimeout(() => copied = false, 2000);
       toastStore.add({ message: 'คัดลอกสรุปยอดแล้ว', type: 'success' });
+    }
+  }
+
+  async function saveAsImage() {
+    if (!tableRef || savingImage) return;
+    savingImage = true;
+    try {
+      const canvas = await html2canvas(tableRef, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+      });
+      const link = document.createElement('a');
+      link.download = `สรุปยอด_${group?.name || 'group'}_${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toastStore.add({ message: 'บันทึกรูปสำเร็จ', type: 'success' });
+    } catch (error) {
+      console.error('Error saving image:', error);
+      toastStore.add({ message: 'ไม่สามารถบันทึกรูปได้', type: 'error' });
+    } finally {
+      savingImage = false;
     }
   }
 
@@ -192,11 +217,73 @@
         </div>
       </Card>
 
-      <!-- Summary by Member -->
-      <div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Users class="w-5 h-5 text-primary-600" />
-          ยอดต่อคน
+      <!-- View Toggle -->
+      <div class="flex gap-2">
+        <Button
+          variant={viewMode === 'card' ? 'primary' : 'secondary'}
+          onclick={() => viewMode = 'card'}
+          class="flex-1 gap-2"
+        >
+          <List class="w-4 h-4" />
+          รายละเอียด
+        </Button>
+        <Button
+          variant={viewMode === 'table' ? 'primary' : 'secondary'}
+          onclick={() => viewMode = 'table'}
+          class="flex-1 gap-2"
+        >
+          <Grid class="w-4 h-4" />
+          ตาราง
+        </Button>
+      </div>
+
+      {#if viewMode === 'table'}
+        <!-- Table View for OCR -->
+        <Card padding="none" class="border-2 border-gray-800 rounded-none">
+          <div bind:this={tableRef} class="p-6 bg-white">
+            <h3 class="text-xl font-bold text-gray-900 mb-4 text-center">
+              {group?.name}
+            </h3>
+            <table class="w-full border-collapse text-xl">
+              <thead>
+                <tr class="border-b-4 border-gray-900 bg-gray-100">
+                  <th class="text-left py-3 px-4 font-bold text-gray-900">ชื่อ</th>
+                  <th class="text-right py-3 px-4 font-bold text-gray-900">ยอดที่ต้องจ่าย</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each summary.filter(s => s.net < -0.01) as item}
+                  <tr class="border-b-2 border-gray-400">
+                    <td class="py-4 px-4 text-gray-900 text-lg">{item.member.name}</td>
+                    <td class="text-right py-4 px-4 text-gray-900 font-bold text-lg">
+                      {Math.abs(item.net).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <!-- Save Image Button -->
+        <div class="mt-6 mb-4">
+        <Button
+          variant="primary"
+          onclick={saveAsImage}
+          fullWidth
+          class="gap-2"
+          disabled={savingImage}
+        >
+          <Image class="w-4 h-4" />
+          {savingImage ? 'กำลังบันทึก...' : 'บันทึกรูป'}
+        </Button>
+        </div>
+      {:else}
+        <!-- Summary by Member (Card View) -->
+        <div>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Users class="w-5 h-5 text-primary-600" />
+            ยอดต่อคน
         </h3>
 
         <div class="space-y-3">
@@ -304,6 +391,7 @@
           คัดลอกสรุปยอด
         {/if}
       </Button>
+      {/if}
     </div>
   {/if}
 </main>

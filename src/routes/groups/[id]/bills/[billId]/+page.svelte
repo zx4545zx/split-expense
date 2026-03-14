@@ -6,7 +6,8 @@
   import { toastStore, isLoading } from '$lib/stores';
   import { formatCurrency, calculateSplitAmounts, calculateBillTotals } from '$lib/utils';
   import type { Group, GroupMember, Bill, BillSplit, SplitType } from '$lib/types';
-  import { Receipt, Calculator, Trash2 } from 'lucide-svelte';
+  import { Receipt, Calculator, Trash2, Grid, List, Image } from 'lucide-svelte';
+  import html2canvas from 'html2canvas';
 
   const groupId = page.params.id as string;
   const billId = page.params.billId as string;
@@ -30,6 +31,9 @@
 
   let isSubmitting = $state(false);
   let isLoadingData = $state(true);
+  let viewMode = $state<'card' | 'table'>('card');
+  let tableRef = $state<HTMLElement | null>(null);
+  let savingImage = $state(false);
 
   async function loadData() {
     isLoadingData = true;
@@ -205,6 +209,31 @@
     }
   }
 
+  async function saveAsImage() {
+    if (savingImage) return;
+    if (!tableRef) {
+      toastStore.add({ message: 'กรุณาเปลี่ยนเป็นโหมดตารางก่อน', type: 'error' });
+      return;
+    }
+    savingImage = true;
+    try {
+      const canvas = await html2canvas(tableRef, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+      });
+      const link = document.createElement('a');
+      link.download = `บิล_${description || 'bill'}_${new Date().toISOString().split('T')[0]}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      toastStore.add({ message: 'บันทึกรูปสำเร็จ', type: 'success' });
+    } catch (error) {
+      console.error('Error saving image:', error);
+      toastStore.add({ message: 'ไม่สามารถบันทึกรูปได้', type: 'error' });
+    } finally {
+      savingImage = false;
+    }
+  }
+
   onMount(() => {
     loadData();
   });
@@ -340,18 +369,86 @@
           </button>
         </div>
 
-        <!-- Split Details -->
-        <div class="space-y-3">
-          {#each members as member}
-            <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-              <Avatar name={member.name} size="sm" />
-              <div class="flex-1">
-                <p class="font-medium text-gray-900">{member.name}</p>
-              </div>
+        <!-- View Toggle -->
+        <div class="flex gap-2 mb-4">
+          <Button
+            variant={viewMode === 'card' ? 'primary' : 'secondary'}
+            onclick={() => viewMode = 'card'}
+            class="flex-1 gap-2"
+          >
+            <List class="w-4 h-4" />
+            รายละเอียด
+          </Button>
+          <Button
+            variant={viewMode === 'table' ? 'primary' : 'secondary'}
+            onclick={() => viewMode = 'table'}
+            class="flex-1 gap-2"
+          >
+            <Grid class="w-4 h-4" />
+            ตาราง
+          </Button>
+        </div>
 
-              {#if splitType === 'equal'}
-                {@const equalAmount = members.length > 0 ? totals.netAmount / members.length : 0}
-                <p class="font-semibold text-primary-600">{formatCurrency(equalAmount)}</p>
+        {#if viewMode === 'table'}
+          <!-- Table View for OCR -->
+          <div bind:this={tableRef} class="p-4 bg-white border-2 border-gray-800">
+            <h3 class="text-lg font-bold text-gray-900 mb-2 text-center">
+              {description}
+            </h3>
+            <p class="text-sm text-gray-600 mb-3 text-center">
+              ยอดรวม: {Number(totalAmount).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            <table class="w-full border-collapse text-base">
+              <thead>
+                <tr class="border-b-4 border-gray-900 bg-gray-100">
+                  <th class="text-left py-2 px-3 font-bold text-gray-900">ชื่อ</th>
+                  <th class="text-right py-2 px-3 font-bold text-gray-900">ยอด</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each members as member}
+                  {@const splitAmount = splitType === 'equal'
+                    ? (members.length > 0 ? totals.netAmount / members.length : 0)
+                    : splitType === 'percentage'
+                      ? totals.netAmount * ((percentages[member.id] || 0) / 100)
+                      : (manualAmounts[member.id] || 0)}
+                  <tr class="border-b-2 border-gray-300">
+                    <td class="py-2 px-3 text-gray-900">{member.name}</td>
+                    <td class="text-right py-2 px-3 text-gray-900 font-medium">
+                      {splitAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Save Image Button -->
+          <div class="mt-6 mb-4">
+          <Button
+            variant="primary"
+            onclick={saveAsImage}
+            fullWidth
+            class="gap-2"
+            disabled={savingImage}
+          >
+            <Image class="w-4 h-4" />
+            {savingImage ? 'กำลังบันทึก...' : 'บันทึกรูป'}
+          </Button>
+          </div>
+        {:else}
+          <!-- Split Details (Card View) -->
+          <div class="space-y-3">
+            {#each members as member}
+              <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Avatar name={member.name} size="sm" />
+                <div class="flex-1">
+                  <p class="font-medium text-gray-900">{member.name}</p>
+                </div>
+
+                {#if splitType === 'equal'}
+                  {@const equalAmount = members.length > 0 ? totals.netAmount / members.length : 0}
+                  <p class="font-semibold text-primary-600">{formatCurrency(equalAmount)}</p>
               {:else if splitType === 'percentage'}
                 <div class="flex items-center gap-2">
                   <input
@@ -387,6 +484,7 @@
               </span>
             </div>
           </div>
+        {/if}
         {/if}
       </Card>
 
